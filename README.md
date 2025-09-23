@@ -50,28 +50,45 @@ No more spending 9 hours configuring Cloudflare tunnels and Coolify domains manu
 
 ## AI Client Integration
 
-### VS Code with Continue/Codeium
-1. Install Continue or Codeium extension
+### JetBrains IDEs (Recommended)
+1. **Install MCP Server plugin** from JetBrains Marketplace
+2. **Configure in Settings** → Tools → MCP Server:
+   - **Name**: `Coolify Assistant`
+   - **Command**: `python`
+   - **Arguments**: `/project/workspace/coolify-mcp-server/coolify_mcp_server.py`
+   - **Working Directory**: `/project/workspace/coolify-mcp-server`
+   - **Environment Variables**: 
+     - `PATH=/project/workspace/coolify-mcp-server/coolify_mcp_env/bin:/usr/bin:/bin`
+
+3. **Test the integration** by asking:
+   - `"Check my Coolify applications"`
+   - `"Help configure supabase.therink.io subdomain"`
+   - `"Diagnose tunnel issues"`
+
+### VS Code with Continue
+1. Install Continue extension
 2. Update your MCP configuration:
    ```json
    {
      "mcpServers": {
        "coolify": {
-         "command": "doppler",
-         "args": ["run", "--", "python", "/full/path/to/coolify_mcp_server.py"]
+         "command": "python",
+         "args": ["/project/workspace/coolify-mcp-server/coolify_mcp_server.py"],
+         "cwd": "/project/workspace/coolify-mcp-server"
        }
      }
    }
    ```
 
-### Claude Desktop
+### Claude Desktop (Requires Claude Pro)
 Add to your Claude Desktop MCP configuration:
 ```json
 {
   "mcpServers": {
     "coolify": {
-      "command": "doppler",
-      "args": ["run", "--", "python", "/full/path/to/coolify_mcp_server.py"]
+      "command": "python",
+      "args": ["/project/workspace/coolify-mcp-server/coolify_mcp_server.py"],
+      "cwd": "/project/workspace/coolify-mcp-server"
     }
   }
 }
