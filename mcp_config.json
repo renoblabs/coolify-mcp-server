@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "coolify-automation": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "cd /d C:\\Users\\19057\\Factory\\ProjectsnSessions\\coolify-mcp-server && .\\coolify_mcp_env\\Scripts\\activate && doppler run -- python coolify_mcp_server.py"
+      ],
+      "env": {},
+      "disabled": false
+    }
+  }
+}

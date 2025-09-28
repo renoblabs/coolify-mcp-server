@@ -11,6 +11,7 @@ import os
 from typing import Dict, List, Optional, Any
 import asyncio
 from dotenv import load_dotenv
+import cloudflare
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,6 +21,12 @@ app = FastMCP("Coolify Assistant")
 # Configuration - using Doppler for secrets
 COOLIFY_BASE_URL = os.getenv("COOLIFY_BASE_URL", "http://localhost:8000")
 API_TOKEN = os.getenv("COOLIFY_API_TOKEN")
+
+# Cloudflare configuration
+CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
+CF_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID")  # For therink.io domain
+CF_TUNNEL_ID = os.getenv("CLOUDFLARE_TUNNEL_ID")  # Your tunnel ID
+BASE_DOMAIN = os.getenv("BASE_DOMAIN", "therink.io")
 
 # Optional: Support for switching between local and tunnel URLs
 if os.getenv("USE_TUNNEL", "false").lower() == "true":
