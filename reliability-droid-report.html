@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alert Investigation Report</title>
+  <style>
+    /* Base styles */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1, h2, h3 {
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      page-break-after: avoid;
+    }
+    
+    h1 {
+      font-size: 24px;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+    
+    h2 {
+      font-size: 20px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+    }
+    
+    /* Header styles */
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 3px solid #eee;
+      padding-bottom: 15px;
+    }
+    
+    .header-left {
+      flex: 1;
+    }
+    
+    .header-right {
+      flex: 1;
+      text-align: right;
+    }
+    
+    /* Severity badges */
+    .severity-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .sev-1 {
+      background-color: #d9534f;
+      color: white;
+    }
+    
+    .sev-2 {
+      background-color: #f0ad4e;
+      color: white;
+    }
+    
+    .sev-3 {
+      background-color: #f7e58d;
+      color: #333;
+    }
+    
+    /* Content sections */
+    .section {
+      margin-bottom: 30px;
+      page-break-inside: avoid;
+    }
+    
+    /* Code blocks */
+    pre {
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      overflow-x: auto;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      page-break-inside: avoid;
+    }
+    
+    /* Details/summary for collapsible sections */
+    details {
+      margin: 10px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+    
+    summary {
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    /* Images */
+    img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #ddd;
+      margin: 10px 0;
+      page-break-inside: avoid;
+    }
+    
+    /* Links */
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+    
+    /* Timeline */
+    .timeline {
+      margin-left: 20px;
+    }
+    
+    .timeline-item {
+      margin-bottom: 15px;
+      position: relative;
+    }
+    
+    .timeline-time {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    
+    .timeline-content {
+      margin-left: 10px;
+    }
+    
+    /* Fix proposal */
+    .fix-steps {
+      list-style-type: decimal;
+      padding-left: 20px;
+    }
+    
+    .fix-step {
+      margin-bottom: 15px;
+    }
+    
+    /* Footer */
+    .footer {
+      margin-top: 40px;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+      font-size: 12px;
+      color: #777;
+      text-align: center;
+    }
+    
+    /* Print styles */
+    @media print {
+      body {
+        font-size: 12pt;
+      }
+      
+      a {
+        color: #000;
+      }
+      
+      a:after {
+        content: " (" attr(href) ")";
+        font-size: 90%;
+        color: #555;
+      }
+      
+      .no-print {
+        display: none;
+      }
+      
+      @page {
+        margin: 1.5cm;
+      }
+    }
+    
+    /* Annotation styles */
+    .replace-note {
+      background-color: #fffacd;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-style: italic;
+      font-size: 0.9em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header Section -->
+  <div class="header" id="header">
+    <div class="header-left">
+      <h1>MCP Server Hanging Investigation</h1>
+      <div>
+        <span class="severity-badge sev-3">SEV-3</span>
+        <span>Started: 2025-09-27 20:27:00 UTC</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div>On-call: <strong>Mark Lambie (@mark)</strong></div>
+    </div>
+  </div>
+  
+  <!-- Executive Summary Section -->
+  <div class="section" id="exec-summary">
+    <h2>Executive Summary</h2>
+    <p>Investigation revealed the MCP server was not actually hanging but exhibiting normal STDIO behavior. The root cause was a broken integration between the main server file and new Cloudflare automation functions. The server appeared to hang because it was correctly waiting for STDIO input, but the CF automation tools were not properly integrated, causing functionality issues.</p>
+  </div>
+  
+  <!-- Root Cause Analysis Section -->
+  <div class="section" id="rca">
+    <h2>Root Cause Analysis</h2>
+    <div>
+      <p>Root cause identified:</p>
+      <ul>
+        <li><strong>Primary Issue:</strong> The cf_automation.py file contained tool definitions that referenced an undefined 'app' variable, causing ImportError when imported</li>
+        <li><strong>Contributing Factors:</strong> 
+          <ul>
+            <li>Cloudflare automation functions were written as standalone tools but not integrated into the main MCP server</li>
+            <li>Import statement case mismatch (CloudFlare vs cloudflare)</li>
+            <li>Missing integration of create_dns_record and automate_service_deployment functions</li>
+          </ul>
+        </li>
+      </ul>
+      
+      <h3>Evidence</h3>
+      
+      <!-- Code evidence -->
+      <h4>Code Evidence</h4>
+      <details>
+        <summary>Error from cf_automation.py import attempt</summary>
+        <pre>
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\19057\Factory\ProjectsnSessions\coolify-mcp-server\cf_automation.py", line 3, in <module>
+    @app.tool()
+     ^^^
+NameError: name 'app' is not defined
+        </pre>
+      </details>
+      
+      <details>
+        <summary>Original cf_automation.py structure (broken)</summary>
+        <pre>
+# NEW CLOUDFLARE AUTOMATION TOOLS FOR MCP SERVER
+
+@app.tool()  # <-- 'app' is not defined in this file
+async def create_dns_record(subdomain: str, target: str = "cloud.therink.io", 
+                           record_type: str = "CNAME") -> Dict:
+    """Create a DNS record in Cloudflare for a subdomain"""
+    # ... implementation ...
+        </pre>
+      </details>
+      
+      <h4>MCP Server Behavior</h4>
+      <p>The server startup showed normal FastMCP initialization:</p>
+      <pre>
++----------------------------------------------------------------------------+
+|                                FastMCP  2.0                                |
+|                                                                            |
+|                 🖥️  Server name:     Coolify Assistant                      |
+|                 📦 Transport:       STDIO                                  |
+|                                                                            |
+|                 🏎️  FastMCP version: 2.12.4                                 |
+|                 🤝 MCP SDK version: 1.15.0                                 |
++----------------------------------------------------------------------------+
+
+[09/27/25 20:27:09] INFO     Starting MCP server 'Coolify Assistant' with transport 'stdio'
+      </pre>
+      <p>This is normal STDIO behavior - the server waits for JSON-RPC messages via standard input.</p>
+      
+    </div>
+  </div>
+  
+  <!-- Proposed Fix Section -->
+  <div class="section" id="fix-proposal">
+    <h2>Proposed Fix</h2>
+    <ol class="fix-steps">
+      <li class="fix-step">
+        <strong>Immediate Fix (Implemented):</strong> Created coolify_mcp_server_v2.py with integrated Cloudflare automation functions
+        <div>Validation: Server starts successfully with all tools available</div>
+      </li>
+      <li class="fix-step">
+        <strong>Short-term Solution:</strong> Replace original coolify_mcp_server.py with the fixed version
+        <pre>
+cd coolify-mcp-server
+cp coolify_mcp_server_v2.py coolify_mcp_server.py
+        </pre>
+        <div>Validation: Test with AI client to confirm MCP tools are accessible</div>
+      </li>
+      <li class="fix-step">
+        <strong>Long-term Solution:</strong> Update MCP client configuration to properly connect
+        <div>For Claude Desktop or VS Code Continue/Codeium:</div>
+        <pre>
+{
+  "mcpServers": {
+    "coolify": {
+      "command": "doppler",
+      "args": ["run", "--", "python", "C:/Users/19057/Factory/ProjectsnSessions/coolify-mcp-server/coolify_mcp_server.py"]
+    }
+  }
+}
+        </pre>
+        <div>Validation: AI client successfully connects and can invoke tools like automate_service_deployment()</div>
+      </li>
+    </ol>
+  </div>
+  
+  <!-- Incident Timeline Section -->
+  <div class="section" id="timeline">
+    <h2>Incident Timeline</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <span class="timeline-time">20:27 UTC</span>
+        <div class="timeline-content">
+          Initial investigation started - examined MCP server code
+          <div>Found cf_automation.py with unintegrated tool definitions</div>
+        </div>
+      </div>
+      
+      <div class="timeline-item">
+        <span class="timeline-time">20:30 UTC</span>
+        <div class="timeline-content">
+          Tested MCP server startup behavior
+          <div>Server started normally, waiting for STDIO input (not hanging)</div>
+        </div>
+      </div>
+      
+      <div class="timeline-item">
+        <span class="timeline-time">20:31 UTC</span>
+        <div class="timeline-content">
+          Discovered root cause: cf_automation.py NameError
+          <div>Functions referenced undefined 'app' variable</div>
+        </div>
+      </div>
+      
+      <div class="timeline-item">
+        <span class="timeline-time">20:33 UTC</span>
+        <div class="timeline-content">
+          Created fixed version: coolify_mcp_server_v2.py
+          <div>Integrated all Cloudflare automation tools properly</div>
+          <div>Fixed import case (cloudflare vs CloudFlare)</div>
+        </div>
+      </div>
+      
+      <div class="timeline-item">
+        <span class="timeline-time">20:33 UTC</span>
+        <div class="timeline-content">
+          Validated fix: Server starts successfully
+          <div>All tools now available including automate_service_deployment()</div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  
+  <!-- Additional Notes -->
+  <div class="section" id="notes">
+    <h2>Additional Notes</h2>
+    <ul>
+      <li>The perceived "hanging" was normal MCP STDIO behavior - servers wait for JSON-RPC messages</li>
+      <li>The cf_automation.py file should be removed or refactored as a proper module</li>
+      <li>cloudflare Python package is already installed in the virtual environment</li>
+      <li>All Doppler secrets are properly configured (USE_TUNNEL=true, CF API credentials set)</li>
+      <li>The fixed server includes all tools: Coolify management, Cloudflare DNS automation, and diagnostic tools</li>
+    </ul>
+  </div>
+  
+  <!-- Footer -->
+  <div class="footer">
+    <p>Generated: 2025-09-27 20:35:00 UTC by Reliability Droid</p>
+  </div>
+</body>
+</html>
