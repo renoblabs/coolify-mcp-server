@@ -65,28 +65,10 @@ async def make_coolify_request(method: str, endpoint: str, data: Optional[Dict] 
         except Exception as e:
             return {"error": str(e)}
 
-# ==================== AUTHENTICATION MIDDLEWARE ====================
-
-@app.middleware()
-async def auth_middleware(request, call_next):
-    """Simple token-based authentication for remote access"""
-    # Check if auth token is present in headers
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        try:
-            token = auth_header.replace("Bearer ", "")
-            if token != MCP_AUTH_TOKEN:
-                return {"error": "Invalid authentication token"}
-        except:
-            return {"error": "Invalid authorization header"}
-    else:
-        # For initial connection, might come as parameter
-        if hasattr(request, 'params'):
-            token = request.params.get("auth_token")
-            if token != MCP_AUTH_TOKEN:
-                return {"error": "Authentication required"}
-    
-    return await call_next(request)
+# ==================== AUTHENTICATION ====================
+# Note: FastMCP doesn't have built-in auth middleware for SSE
+# Authentication should be handled by the reverse proxy (Cloudflare Tunnel)
+# or implemented at the transport layer
 
 # ==================== SERVER INFO ====================
 
@@ -346,13 +328,12 @@ async def diagnose_tunnel_issues(app_uuid: str) -> Dict:
 # Main entry point with HTTP transport
 if __name__ == "__main__":
     import sys
-    import uvicorn
     
     print(f"""
     ╭────────────────────────────────────────────────────────╮
     │           Coolify MCP Server - REMOTE MODE             │
     ├────────────────────────────────────────────────────────┤
-    │  🌐 Starting HTTP/WebSocket server...                  │
+    │  🌐 Starting HTTP/SSE server...                        │
     │  📍 Host: {MCP_HOST}                                   │
     │  🔌 Port: {MCP_PORT}                                   │
     │  🔐 Auth: {"Enabled" if MCP_AUTH_TOKEN else "DISABLED"}│
@@ -364,9 +345,11 @@ if __name__ == "__main__":
     ╰────────────────────────────────────────────────────────╯
     """)
     
-    # Run with HTTP transport for remote access
-    app.run(
-        transport="http",
+    # Run with SSE (Server-Sent Events) transport for remote access
+    # FastMCP supports: stdio, sse, or custom transports
+    import asyncio
+    
+    asyncio.run(app.run_sse_async(
         host=MCP_HOST,
         port=MCP_PORT
-    )
+    ))

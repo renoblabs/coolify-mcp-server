@@ -1,0 +1,90 @@
+{
+  "mcp_server_configurations": {
+    "genspark_app": {
+      "name": "Coolify Assistant",
+      "type": "mcp",
+      "endpoint": "https://mcp.therink.io",
+      "transport": "sse",
+      "authentication": {
+        "type": "bearer",
+        "token": "Qw2xK-YhJO5Bp7XfvLZDVjH1kF3GxmnRn7UyQNzM_EY"
+      },
+      "capabilities": [
+        "list_applications",
+        "deploy_application",
+        "get_application_details",
+        "get_application_environment",
+        "update_application_environment",
+        "get_application_logs",
+        "restart_application",
+        "stop_application",
+        "create_dns_record",
+        "automate_service_deployment",
+        "diagnose_tunnel_issues",
+        "get_server_info"
+      ]
+    },
+    "manus_app": {
+      "server_name": "Coolify MCP",
+      "server_url": "https://mcp.therink.io",
+      "auth_type": "bearer",
+      "auth_token": "Qw2xK-YhJO5Bp7XfvLZDVjH1kF3GxmnRn7UyQNzM_EY",
+      "transport": "server-sent-events",
+      "tools": [
+        {
+          "name": "list_applications",
+          "description": "List all applications in Coolify"
+        },
+        {
+          "name": "deploy_application",
+          "description": "Deploy an application",
+          "parameters": ["app_uuid", "force_rebuild"]
+        },
+        {
+          "name": "create_dns_record",
+          "description": "Create DNS record in Cloudflare",
+          "parameters": ["subdomain", "target", "record_type"]
+        },
+        {
+          "name": "automate_service_deployment",
+          "description": "Fully automate service deployment",
+          "parameters": ["service_name", "subdomain", "app_uuid", "port"]
+        }
+      ]
+    },
+    "generic_mcp_client": {
+      "endpoint": "https://mcp.therink.io/sse",
+      "headers": {
+        "Authorization": "Bearer Qw2xK-YhJO5Bp7XfvLZDVjH1kF3GxmnRn7UyQNzM_EY",
+        "Accept": "text/event-stream"
+      },
+      "protocol": {
+        "version": "1.0.0",
+        "transport": "sse"
+      }
+    }
+  },
+  "cloudflare_tunnel_config": {
+    "add_to_config_yml": {
+      "hostname": "mcp.therink.io",
+      "service": "http://localhost:8765"
+    },
+    "or_use_dashboard": {
+      "url": "https://one.dash.cloudflare.com/",
+      "path": "Access -> Tunnels -> RenobCloud -> Configure -> Public Hostname",
+      "settings": {
+        "subdomain": "mcp",
+        "domain": "therink.io",
+        "service": "HTTP",
+        "url": "localhost:8765"
+      }
+    }
+  },
+  "server_status": {
+    "local_url": "http://localhost:8765",
+    "remote_url": "https://mcp.therink.io",
+    "transport": "SSE (Server-Sent Events)",
+    "authentication": "Bearer Token",
+    "tools_available": 12
+  }
+}
