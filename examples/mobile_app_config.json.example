@@ -1,0 +1,42 @@
+{
+  "mcp_server_configurations": {
+    "genspark_or_similar_app": {
+      "name": "Coolify Assistant",
+      "type": "mcp",
+      "endpoint": "https://mcp.your-domain.com",
+      "transport": "sse",
+      "authentication": {
+        "type": "bearer",
+        "token": "YOUR_MCP_AUTH_TOKEN_FROM_DOPPLER"
+      },
+      "capabilities": [
+        "list_applications",
+        "deploy_application",
+        "get_application_details",
+        "get_application_environment",
+        "update_application_environment",
+        "get_application_logs",
+        "restart_application",
+        "stop_application",
+        "create_dns_record",
+        "automate_service_deployment",
+        "diagnose_tunnel_issues",
+        "get_server_info"
+      ]
+    }
+  },
+  "cloudflare_tunnel_config": {
+    "add_to_config_yml_or_dashboard": {
+      "hostname": "mcp.your-domain.com",
+      "service": "http://localhost:8765"
+    }
+  },
+  "instructions": {
+    "setup": [
+      "1. Set MCP_AUTH_TOKEN in Doppler secrets",
+      "2. Configure Cloudflare tunnel to route mcp.your-domain.com to localhost:8765",
+      "3. Start server: ./start.sh",
+      "4. Use the endpoint and token in your mobile AI app"
+    ]
+  }
+}
