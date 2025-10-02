@@ -88,7 +88,7 @@ async def get_server_info() -> Dict:
             "local": f"http://localhost:{MCP_PORT}",
             "tunnel": f"https://mcp.therink.io"  # You'll configure this
         },
-        "tools_available": 12
+        "tools_available": 18  # Updated with server management tools
     }
 
 # ==================== COOLIFY MANAGEMENT TOOLS ====================
@@ -171,6 +171,197 @@ async def stop_application(app_uuid: str) -> Dict:
         app_uuid: The UUID of the application to stop
     """
     return await make_coolify_request("POST", f"/applications/{app_uuid}/stop")
+
+# ==================== SERVER MANAGEMENT TOOLS ====================
+
+@app.tool()
+async def list_servers() -> Dict:
+    """List all servers/destinations configured in Coolify
+    
+    Returns information about all deployment destinations including
+    local server, remote servers, and their capabilities.
+    """
+    return await make_coolify_request("GET", "/servers")
+
+@app.tool()
+async def get_server_details(server_uuid: str) -> Dict:
+    """Get detailed information about a specific server
+    
+    Args:
+        server_uuid: The UUID of the server to get details for
+        
+    Returns server info including name, IP, status, and resources
+    """
+    return await make_coolify_request("GET", f"/servers/{server_uuid}")
+
+@app.tool()
+async def get_server_resources(server_uuid: str) -> Dict:
+    """Get resource usage and availability for a server
+    
+    Args:
+        server_uuid: The UUID of the server to check
+        
+    Returns CPU, RAM, disk usage, and availability info
+    """
+    server_info = await make_coolify_request("GET", f"/servers/{server_uuid}")
+    
+    if "error" in server_info:
+        return server_info
+    
+    # Extract resource information from server data
+    resources = {
+        "server_uuid": server_uuid,
+        "server_name": server_info.get("data", {}).get("name", "Unknown"),
+        "status": server_info.get("data", {}).get("status", "unknown"),
+        "resources": server_info.get("data", {}).get("resources", {}),
+        "available": server_info.get("data", {}).get("status") == "reachable"
+    }
+    
+    return resources
+
+@app.tool()
+async def deploy_to_server(app_uuid: str, server_name_or_uuid: str, force_rebuild: bool = False) -> Dict:
+    """Smart deployment - deploy application to a specific server by name or UUID
+    
+    Args:
+        app_uuid: The UUID of the application to deploy
+        server_name_or_uuid: Server name (e.g., 'Main Computer') or UUID
+        force_rebuild: Whether to force rebuild the application
+        
+    This tool will:
+    1. Find the server by name or UUID
+    2. Check if the server is available
+    3. Deploy the application to that server
+    4. Return deployment status
+    """
+    # First, try to get all servers
+    servers_response = await make_coolify_request("GET", "/servers")
+    
+    if "error" in servers_response:
+        return {"error": f"Failed to get servers list: {servers_response['error']}"}
+    
+    servers = servers_response.get("data", [])
+    target_server = None
+    
+    # Try to find server by name or UUID
+    for server in servers:
+        if server.get("uuid") == server_name_or_uuid or server.get("name") == server_name_or_uuid:
+            target_server = server
+            break
+    
+    if not target_server:
+        available_servers = [f"{s.get('name')} ({s.get('uuid')})" for s in servers]
+        return {
+            "error": f"Server '{server_name_or_uuid}' not found",
+            "available_servers": available_servers
+        }
+    
+    # Check if server is reachable
+    server_status = target_server.get("status")
+    if server_status != "reachable":
+        return {
+            "error": f"Server '{target_server.get('name')}' is not reachable (status: {server_status})",
+            "server_uuid": target_server.get("uuid")
+        }
+    
+    # Get application details to update destination
+    app_details = await get_application_details(app_uuid)
+    if "error" in app_details:
+        return {"error": f"Failed to get application details: {app_details.get('error')}"}
+    
+    # Update application destination (if Coolify API supports it)
+    # Note: The exact endpoint may vary depending on Coolify version
+    update_result = await make_coolify_request(
+        "PUT", 
+        f"/applications/{app_uuid}",
+        {"destination_uuid": target_server.get("uuid")}
+    )
+    
+    # Now deploy the application
+    deploy_result = await deploy_application(app_uuid, force_rebuild)
+    
+    return {
+        "success": "error" not in deploy_result,
+        "server_name": target_server.get("name"),
+        "server_uuid": target_server.get("uuid"),
+        "app_uuid": app_uuid,
+        "deployment": deploy_result,
+        "message": f"Deployed to {target_server.get('name')}"
+    }
+
+@app.tool()
+async def smart_deploy(
+    service_name: str,
+    app_uuid: str,
+    requires_gpu: bool = False,
+    requires_high_memory: bool = False,
+    preferred_server: Optional[str] = None
+) -> Dict:
+    """Intelligently deploy an application based on resource requirements
+    
+    Args:
+        service_name: Name of the service being deployed
+        app_uuid: The UUID of the application
+        requires_gpu: Whether the app needs GPU resources
+        requires_high_memory: Whether the app needs high memory (>8GB)
+        preferred_server: Optional specific server name to use
+        
+    This tool will:
+    1. Analyze resource requirements
+    2. Find the best available server
+    3. Deploy to that server
+    4. Report deployment status
+    """
+    # Get all servers
+    servers_response = await list_servers()
+    if "error" in servers_response:
+        return {"error": f"Failed to get servers: {servers_response['error']}"}
+    
+    servers = servers_response.get("data", [])
+    
+    # If preferred server specified, use it
+    if preferred_server:
+        return await deploy_to_server(app_uuid, preferred_server)
+    
+    # Smart server selection logic
+    selected_server = None
+    
+    for server in servers:
+        server_name = server.get("name", "").lower()
+        
+        # GPU requirement - look for keywords
+        if requires_gpu:
+            if any(keyword in server_name for keyword in ["gpu", "main", "workstation", "desktop"]):
+                selected_server = server
+                break
+        
+        # High memory requirement
+        if requires_high_memory:
+            if any(keyword in server_name for keyword in ["main", "powerful", "workstation"]):
+                selected_server = server
+                break
+    
+    # Default to first reachable server if no match
+    if not selected_server:
+        for server in servers:
+            if server.get("status") == "reachable":
+                selected_server = server
+                break
+    
+    if not selected_server:
+        return {"error": "No reachable servers found"}
+    
+    # Deploy to selected server
+    result = await deploy_to_server(app_uuid, selected_server.get("uuid"))
+    
+    result["selection_reason"] = {
+        "requires_gpu": requires_gpu,
+        "requires_high_memory": requires_high_memory,
+        "selected_server": selected_server.get("name"),
+        "server_capabilities": f"Selected based on {'GPU' if requires_gpu else 'memory' if requires_high_memory else 'availability'} requirements"
+    }
+    
+    return result
 
 # ==================== CLOUDFLARE AUTOMATION TOOLS ====================
 

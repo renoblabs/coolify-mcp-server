@@ -35,7 +35,7 @@ doppler secrets set CLOUDFLARE_ZONE_ID="your-zone-id"      # Optional
 
 Server runs at `http://localhost:8765` - expose via Cloudflare tunnel for remote access.
 
-## 🔧 Available Tools
+## 🔧 Available Tools (18 Total)
 
 ### Coolify Management
 - `list_applications()` - List all apps
@@ -46,6 +46,13 @@ Server runs at `http://localhost:8765` - expose via Cloudflare tunnel for remote
 - `get_application_logs(app_uuid, lines)` - View logs
 - `restart_application(app_uuid)` - Restart app
 - `stop_application(app_uuid)` - Stop app
+
+### 🎯 Multi-Server Management (NEW!)
+- `list_servers()` - List all deployment destinations
+- `get_server_details(server_uuid)` - Server info with resources
+- `get_server_resources(server_uuid)` - CPU/RAM/disk availability
+- `deploy_to_server(app_uuid, server_name)` - Deploy to specific server by name
+- `smart_deploy(service, app_uuid, requires_gpu, requires_high_memory)` - Auto-select best server
 
 ### Cloudflare Automation
 - `create_dns_record(subdomain, target)` - Create DNS records
@@ -122,6 +129,18 @@ python tests/test_remote_server.py
 ```
 
 ## 🚀 Usage Examples
+
+### Multi-Server Deployment
+```
+AI: "Show me all my servers"
+→ Uses list_servers()
+
+AI: "Deploy my Stable Diffusion app to the GPU server"
+→ Uses smart_deploy() with requires_gpu=true
+
+AI: "Deploy this lightweight API to the dev box"
+→ Uses deploy_to_server(app_uuid, "Dev Box")
+```
 
 ### Via Mobile AI App
 "Deploy my Supabase instance to supabase.mydomain.com"
