@@ -30,6 +30,10 @@ ENV/
 .env
 .env.local
 
+# Sensitive configuration files with tokens
+MOBILE_APP_CONFIG.json
+REMOTE_ACCESS_SETUP.md
+
 # IDE
 .vscode/
 .idea/
