@@ -70,7 +70,7 @@ coolify-mcp-server/
 ## What You Need to Do Now
 
 ### 1. Rotate the Exposed Token 🔑
-The token `Qw2xK-YhJO5Bp7XfvLZDVjH1kF3GxmnRn7UyQNzM_EY` was in the repo, so rotate it:
+The MCP_AUTH_TOKEN was previously exposed in the repo, so rotate it:
 
 ```bash
 # Generate new token
