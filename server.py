@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Coolify MCP Server - REMOTE VERSION
 Provides HTTP/WebSocket transport for remote access from mobile AI apps
@@ -520,21 +520,15 @@ async def diagnose_tunnel_issues(app_uuid: str) -> Dict:
 if __name__ == "__main__":
     import sys
     
-    print(f"""
-    ╭────────────────────────────────────────────────────────╮
-    │           Coolify MCP Server - REMOTE MODE             │
-    ├────────────────────────────────────────────────────────┤
-    │  🌐 Starting HTTP/SSE server...                        │
-    │  📍 Host: {MCP_HOST}                                   │
-    │  🔌 Port: {MCP_PORT}                                   │
-    │  🔐 Auth: {"Enabled" if MCP_AUTH_TOKEN else "DISABLED"}│
-    │                                                        │
-    │  Local:  http://localhost:{MCP_PORT}                   │
-    │  Remote: Configure via Cloudflare tunnel              │
-    │                                                        │
-    │  Auth Token: {MCP_AUTH_TOKEN[:10]}...                 │
-    ╰────────────────────────────────────────────────────────╯
-    """)
+    auth_status = "Enabled" if MCP_AUTH_TOKEN else "DISABLED"
+    print("=" * 60)
+    print("Coolify MCP Server - REMOTE MODE")
+    print("=" * 60)
+    print(f"Host: {MCP_HOST}")
+    print(f"Port: {MCP_PORT}")
+    print(f"Auth: {auth_status}")
+    print(f"Local: http://localhost:{MCP_PORT}")
+    print("=" * 60)
     
     # Run with SSE (Server-Sent Events) transport for remote access
     # FastMCP supports: stdio, sse, or custom transports
