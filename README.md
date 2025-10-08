@@ -1,17 +1,21 @@
 # Coolify MCP Server 🚀
 
-Remote MCP server for managing your Coolify instance on the go. Deploy apps, manage DNS, and automate your infrastructure from any AI-enabled mobile app or desktop client.
+**Production-Ready Remote MCP Server for Coolify Automation**
+
+Control your entire Coolify infrastructure remotely through AI assistants, mobile apps, or direct API calls. Fully consolidated and ready for deployment on your Linux dev box at `mcp.therink.io`.
 
 ## 🎯 What It Does
 
-- **📱 Remote Access**: Control Coolify from mobile AI apps (Genspark, Manus, etc.)
-- **🤖 AI-Powered**: Full MCP integration with 12+ tools
-- **🌐 DNS Automation**: Auto-create Cloudflare DNS records
-- **🔒 Secure**: Doppler-managed secrets, Bearer token auth
-- **⚡ Fast Setup**: One command to start
+- **📱 Remote Access**: Control Coolify from mobile AI apps (Claude, ChatGPT, Genspark, etc.)
+- **🤖 AI-Powered**: Full MCP integration with 18+ automation tools
+- **🌐 DNS Automation**: Auto-create Cloudflare DNS records and tunnel routes
+- **🔒 Production Security**: Doppler-managed secrets, Bearer token auth, HTTPS
+- **⚡ Multi-Server**: Smart deployment across multiple Coolify servers
+- **🛠️ Windows & Linux**: Cross-platform with optimized runners
 
 ## ⚡ Quick Start
 
+### Production Deployment (Linux)
 ```bash
 # 1. Clone repo
 git clone https://github.com/renoblabs/coolify-mcp-server.git
@@ -23,19 +27,25 @@ pip install -r requirements.txt
 # 3. Configure Doppler secrets
 doppler setup
 doppler secrets set COOLIFY_API_TOKEN="your-coolify-token"
-doppler secrets set COOLIFY_TUNNEL_URL="https://your-tunnel.com"
+doppler secrets set COOLIFY_TUNNEL_URL="https://cloud.therink.io"
 doppler secrets set MCP_AUTH_TOKEN="$(openssl rand -base64 32)"
 doppler secrets set USE_TUNNEL="true"
 doppler secrets set CLOUDFLARE_API_TOKEN="your-cf-token"  # Optional
 doppler secrets set CLOUDFLARE_ZONE_ID="your-zone-id"      # Optional
 
-# 4. Start server
+# 4. Start server (Linux/Production)
 ./start.sh
 ```
 
-Server runs at `http://localhost:8765` - expose via Cloudflare tunnel for remote access.
+### Windows Development
+```powershell
+# Use the Windows-optimized runner
+python run_server.py
+```
 
-## 🔧 Available Tools (18 Total)
+**Production**: Server runs at `http://localhost:8765` and is exposed at `https://mcp.therink.io`
+
+## 🔧 Available Tools
 
 ### Coolify Management
 - `list_applications()` - List all apps

@@ -1,8 +1,10 @@
-# Dev Box Setup - Route MCP Server Traffic
+# Production Deployment Guide
 
-**Location:** Run these commands on your **DEV BOX** (the old PC running Coolify)
+**Target Environment:** Linux Dev Box (the old PC running Coolify)
 
-**Goal:** Configure the Cloudflare tunnel to route `mcp.therink.io` to your main gaming rig
+**Production URL:** `https://mcp.therink.io`
+
+**Goal:** Deploy the Coolify MCP Server for remote access from AI assistants and mobile apps
 
 ---
 
