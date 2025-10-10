@@ -22,15 +22,7 @@ if ! doppler secrets get COOLIFY_API_TOKEN &> /dev/null; then
     echo ""
 fi
 
-# Default to remote mode, pass --mode=stdio for local STDIO mode
-MODE="${1:-remote}"
-
-if [ "$MODE" = "--mode=stdio" ] || [ "$MODE" = "stdio" ]; then
-    echo "📡 Starting in STDIO mode (for Factory Bridge/Claude Desktop)"
-    doppler run -- python server.py --mode stdio
-else
-    echo "🌐 Starting in REMOTE mode (for mobile apps)"
-    echo "Server will be available at: http://localhost:8765"
-    echo ""
-    doppler run -- python server.py
-fi
+echo "🌐 Starting in REMOTE mode (HTTP/SSE)"
+echo "Server will be available at: http://localhost:8765"
+echo ""
+doppler run -- python run_server.py

@@ -1,14 +1,7 @@
 {
   "mcpServers": {
-    "coolify": {
-      "comment": "Local STDIO mode - for Factory Bridge, Claude Desktop, JetBrains",
-      "command": "doppler",
-      "args": ["run", "--", "python", "/absolute/path/to/coolify-mcp-server/server.py", "--mode", "stdio"],
-      "env": {},
-      "disabled": false
-    },
     "coolify-remote": {
-      "comment": "Remote HTTP mode - for mobile AI apps, remote access",
+      "comment": "Remote HTTP/SSE for mobile/remote clients (recommended)",
       "endpoint": "https://mcp.your-domain.com",
       "transport": "sse",
       "authentication": {

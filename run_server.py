@@ -6,7 +6,7 @@ server.py's __main__ guard (which doesn't run when imported).
 """
 import sys
 import os
-import asyncio
+import uvicorn
 
 # Force UTF-8 encoding on Windows
 if sys.platform == "win32":
@@ -20,15 +20,14 @@ if sys.platform == "win32":
 import server
 
 if __name__ == "__main__":
-    auth_status = "Enabled" if server.MCP_AUTH_TOKEN else "DISABLED"
     print("=" * 60)
     print("Coolify MCP Server - REMOTE MODE (run_server.py)")
     print("=" * 60)
     print(f"Host: {server.MCP_HOST}")
     print(f"Port: {server.MCP_PORT}")
-    print(f"Auth: {auth_status}")
+    print("Auth: Enabled")
     print(f"Local: http://localhost:{server.MCP_PORT}")
     print("=" * 60)
 
-    # Use FastMCP 2.x method
-    asyncio.run(server.app.run_http_async(host=server.MCP_HOST, port=server.MCP_PORT))
+    # Start ASGI app
+    uvicorn.run(server=http_app if (http_app := getattr(server, 'http_app', None)) else server.app, host=server.MCP_HOST, port=server.MCP_PORT)

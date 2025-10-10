@@ -14,8 +14,15 @@ from dotenv import load_dotenv
 import cloudflare
 import secrets
 import hashlib
+from starlette.applications import Starlette
+from starlette.responses import PlainTextResponse, Response
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.routing import Route, Mount
+import uvicorn
 
-# Load environment variables
+# Load environment variables (dev convenience)
 load_dotenv()
 
 # Create the MCP app with HTTP transport capability
@@ -35,12 +42,17 @@ BASE_DOMAIN = os.getenv("BASE_DOMAIN", "therink.io")
 MCP_AUTH_TOKEN = os.getenv("MCP_AUTH_TOKEN")
 MCP_PORT = int(os.getenv("MCP_PORT", "8765"))
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")  # Listen on all interfaces
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
 
 # Generate auth token if not set
 if not MCP_AUTH_TOKEN:
     MCP_AUTH_TOKEN = secrets.token_urlsafe(32)
     print(f"Generated MCP Auth Token: {MCP_AUTH_TOKEN}")
     print("Save this token in Doppler: doppler secrets set MCP_AUTH_TOKEN=\"{MCP_AUTH_TOKEN}\"")
+
+# Require Coolify API token to avoid unauthenticated calls failing later
+if not API_TOKEN:
+    raise SystemExit("COOLIFY_API_TOKEN is not set. Set it via Doppler or .env and restart.")
 
 # Optional: Support for switching between local and tunnel URLs
 if os.getenv("USE_TUNNEL", "false").lower() == "true":
@@ -64,6 +76,67 @@ async def make_coolify_request(method: str, endpoint: str, data: Optional[Dict] 
             return response.json() if response.text else {}
         except Exception as e:
             return {"error": str(e)}
+
+# ==================== INTERNAL HELPERS (do NOT decorate) ====================
+# These helpers contain the actual implementation logic. Tools should call
+# these helpers instead of calling other decorated tools to avoid
+# 'FunctionTool object is not callable' errors from FastMCP wrappers.
+
+async def _list_applications_impl() -> Dict:
+    result = await make_coolify_request("GET", "/applications")
+    if isinstance(result, list):
+        return {"applications": result, "count": len(result)}
+    return result
+
+async def _get_application_details_impl(app_uuid: str) -> Dict:
+    return await make_coolify_request("GET", f"/applications/{app_uuid}")
+
+async def _deploy_application_impl(app_uuid: str, force_rebuild: bool = False) -> Dict:
+    data = {"force_rebuild": force_rebuild}
+    return await make_coolify_request("POST", f"/applications/{app_uuid}/deploy", data)
+
+async def _get_application_environment_impl(app_uuid: str) -> Dict:
+    return await make_coolify_request("GET", f"/applications/{app_uuid}/environment")
+
+async def _update_application_environment_impl(app_uuid: str, env_vars: Dict[str, str]) -> Dict:
+    existing = await _get_application_environment_impl(app_uuid)
+    if "data" in existing:
+        current_vars = existing.get("data", {})
+        current_vars.update(env_vars)
+        env_vars = current_vars
+    return await make_coolify_request("PUT", f"/applications/{app_uuid}/environment", {"environment": env_vars})
+
+async def _get_application_logs_impl(app_uuid: str, lines: int = 100) -> Dict:
+    return await make_coolify_request("GET", f"/applications/{app_uuid}/logs?lines={lines}")
+
+async def _restart_application_impl(app_uuid: str) -> Dict:
+    return await make_coolify_request("POST", f"/applications/{app_uuid}/restart")
+
+async def _stop_application_impl(app_uuid: str) -> Dict:
+    return await make_coolify_request("POST", f"/applications/{app_uuid}/stop")
+
+async def _list_servers_impl() -> Dict:
+    result = await make_coolify_request("GET", "/servers")
+    if isinstance(result, list):
+        return {"servers": result, "count": len(result)}
+    return result
+
+async def _get_server_details_impl(server_uuid: str) -> Dict:
+    return await make_coolify_request("GET", f"/servers/{server_uuid}")
+
+async def _get_server_resources_impl(server_uuid: str) -> Dict:
+    server_info = await _get_server_details_impl(server_uuid)
+    if "error" in server_info:
+        return server_info
+    data = server_info.get("data") or server_info  # tolerate bare payloads
+    resources = {
+        "server_uuid": server_uuid,
+        "server_name": (data or {}).get("name", "Unknown"),
+        "status": (data or {}).get("status", "unknown"),
+        "resources": (data or {}).get("resources", {}),
+        "available": (data or {}).get("status") == "reachable",
+    }
+    return resources
 
 # ==================== AUTHENTICATION ====================
 # Note: FastMCP doesn't have built-in auth middleware for SSE
@@ -96,11 +169,7 @@ async def get_server_info() -> Dict:
 @app.tool()
 async def list_applications() -> Dict:
     """List all applications in Coolify"""
-    result = await make_coolify_request("GET", "/applications")
-    # Ensure result is always a dict for FastMCP 2.x compatibility
-    if isinstance(result, list):
-        return {"applications": result, "count": len(result)}
-    return result
+    return await _list_applications_impl()
 
 @app.tool()
 async def get_application_details(app_uuid: str) -> Dict:
@@ -109,7 +178,7 @@ async def get_application_details(app_uuid: str) -> Dict:
     Args:
         app_uuid: The UUID of the application
     """
-    return await make_coolify_request("GET", f"/applications/{app_uuid}")
+    return await _get_application_details_impl(app_uuid)
 
 @app.tool()
 async def deploy_application(app_uuid: str, force_rebuild: bool = False) -> Dict:
@@ -119,8 +188,7 @@ async def deploy_application(app_uuid: str, force_rebuild: bool = False) -> Dict
         app_uuid: The UUID of the application to deploy
         force_rebuild: Whether to force rebuild the application
     """
-    data = {"force_rebuild": force_rebuild}
-    return await make_coolify_request("POST", f"/applications/{app_uuid}/deploy", data)
+    return await _deploy_application_impl(app_uuid, force_rebuild)
 
 @app.tool()
 async def get_application_environment(app_uuid: str) -> Dict:
@@ -129,7 +197,7 @@ async def get_application_environment(app_uuid: str) -> Dict:
     Args:
         app_uuid: The UUID of the application
     """
-    return await make_coolify_request("GET", f"/applications/{app_uuid}/environment")
+    return await _get_application_environment_impl(app_uuid)
 
 @app.tool()
 async def update_application_environment(app_uuid: str, env_vars: Dict[str, str]) -> Dict:
@@ -139,14 +207,7 @@ async def update_application_environment(app_uuid: str, env_vars: Dict[str, str]
         app_uuid: The UUID of the application
         env_vars: Dictionary of environment variables to set/update
     """
-    existing = await make_coolify_request("GET", f"/applications/{app_uuid}/environment")
-    
-    if "data" in existing:
-        current_vars = existing.get("data", {})
-        current_vars.update(env_vars)
-        env_vars = current_vars
-    
-    return await make_coolify_request("PUT", f"/applications/{app_uuid}/environment", {"environment": env_vars})
+    return await _update_application_environment_impl(app_uuid, env_vars)
 
 @app.tool()
 async def get_application_logs(app_uuid: str, lines: int = 100) -> Dict:
@@ -156,7 +217,7 @@ async def get_application_logs(app_uuid: str, lines: int = 100) -> Dict:
         app_uuid: The UUID of the application
         lines: Number of log lines to retrieve (default: 100)
     """
-    return await make_coolify_request("GET", f"/applications/{app_uuid}/logs?lines={lines}")
+    return await _get_application_logs_impl(app_uuid, lines)
 
 @app.tool()
 async def restart_application(app_uuid: str) -> Dict:
@@ -165,7 +226,7 @@ async def restart_application(app_uuid: str) -> Dict:
     Args:
         app_uuid: The UUID of the application to restart
     """
-    return await make_coolify_request("POST", f"/applications/{app_uuid}/restart")
+    return await _restart_application_impl(app_uuid)
 
 @app.tool()
 async def stop_application(app_uuid: str) -> Dict:
@@ -174,7 +235,7 @@ async def stop_application(app_uuid: str) -> Dict:
     Args:
         app_uuid: The UUID of the application to stop
     """
-    return await make_coolify_request("POST", f"/applications/{app_uuid}/stop")
+    return await _stop_application_impl(app_uuid)
 
 # ==================== SERVER MANAGEMENT TOOLS ====================
 
@@ -185,11 +246,7 @@ async def list_servers() -> Dict:
     Returns information about all deployment destinations including
     local server, remote servers, and their capabilities.
     """
-    result = await make_coolify_request("GET", "/servers")
-    # Ensure result is always a dict for FastMCP 2.x compatibility
-    if isinstance(result, list):
-        return {"servers": result, "count": len(result)}
-    return result
+    return await _list_servers_impl()
 
 @app.tool()
 async def get_server_details(server_uuid: str) -> Dict:
@@ -200,7 +257,7 @@ async def get_server_details(server_uuid: str) -> Dict:
         
     Returns server info including name, IP, status, and resources
     """
-    return await make_coolify_request("GET", f"/servers/{server_uuid}")
+    return await _get_server_details_impl(server_uuid)
 
 @app.tool()
 async def get_server_resources(server_uuid: str) -> Dict:
@@ -211,21 +268,7 @@ async def get_server_resources(server_uuid: str) -> Dict:
         
     Returns CPU, RAM, disk usage, and availability info
     """
-    server_info = await make_coolify_request("GET", f"/servers/{server_uuid}")
-    
-    if "error" in server_info:
-        return server_info
-    
-    # Extract resource information from server data
-    resources = {
-        "server_uuid": server_uuid,
-        "server_name": server_info.get("data", {}).get("name", "Unknown"),
-        "status": server_info.get("data", {}).get("status", "unknown"),
-        "resources": server_info.get("data", {}).get("resources", {}),
-        "available": server_info.get("data", {}).get("status") == "reachable"
-    }
-    
-    return resources
+    return await _get_server_resources_impl(server_uuid)
 
 @app.tool()
 async def deploy_to_server(app_uuid: str, server_name_or_uuid: str, force_rebuild: bool = False) -> Dict:
@@ -248,7 +291,11 @@ async def deploy_to_server(app_uuid: str, server_name_or_uuid: str, force_rebuil
     if "error" in servers_response:
         return {"error": f"Failed to get servers list: {servers_response['error']}"}
     
-    servers = servers_response.get("data", [])
+    # Tolerate either a dict payload with 'data' or a raw list
+    if isinstance(servers_response, list):
+        servers = servers_response
+    else:
+        servers = servers_response.get("data", [])
     target_server = None
     
     # Try to find server by name or UUID
@@ -273,7 +320,7 @@ async def deploy_to_server(app_uuid: str, server_name_or_uuid: str, force_rebuil
         }
     
     # Get application details to update destination
-    app_details = await get_application_details(app_uuid)
+    app_details = await _get_application_details_impl(app_uuid)
     if "error" in app_details:
         return {"error": f"Failed to get application details: {app_details.get('error')}"}
     
@@ -286,7 +333,7 @@ async def deploy_to_server(app_uuid: str, server_name_or_uuid: str, force_rebuil
     )
     
     # Now deploy the application
-    deploy_result = await deploy_application(app_uuid, force_rebuild)
+    deploy_result = await _deploy_application_impl(app_uuid, force_rebuild)
     
     return {
         "success": "error" not in deploy_result,
@@ -321,7 +368,7 @@ async def smart_deploy(
     4. Report deployment status
     """
     # Get all servers
-    servers_response = await list_servers()
+    servers_response = await _list_servers_impl()
     if "error" in servers_response:
         return {"error": f"Failed to get servers: {servers_response['error']}"}
     
@@ -437,7 +484,7 @@ async def automate_service_deployment(service_name: str, subdomain: str,
         
         # Step 2: Update application environment if needed
         try:
-            env_vars = await get_application_environment(app_uuid)
+            env_vars = await _get_application_environment_impl(app_uuid)
             updated_env = {}
             
             for key, value in env_vars.get("data", {}).items():
@@ -448,7 +495,7 @@ async def automate_service_deployment(service_name: str, subdomain: str,
                         updated_env[key] = value.replace("http://localhost", f"https://{full_domain}")
             
             if updated_env:
-                update_result = await update_application_environment(app_uuid, updated_env)
+                update_result = await _update_application_environment_impl(app_uuid, updated_env)
                 results["steps"].append(f"✅ Updated {len(updated_env)} environment variables")
                 results["updated_vars"] = updated_env
         except Exception as e:
@@ -456,7 +503,7 @@ async def automate_service_deployment(service_name: str, subdomain: str,
         
         # Step 3: Trigger deployment
         try:
-            deploy_result = await deploy_application(app_uuid)
+            deploy_result = await _deploy_application_impl(app_uuid)
             if not deploy_result.get("error"):
                 results["steps"].append("✅ Triggered application deployment")
             else:
@@ -496,8 +543,8 @@ async def diagnose_tunnel_issues(app_uuid: str) -> Dict:
     issues = []
     recommendations = []
     
-    app_details = await get_application_details(app_uuid)
-    env_vars = await get_application_environment(app_uuid)
+    app_details = await _get_application_details_impl(app_uuid)
+    env_vars = await _get_application_environment_impl(app_uuid)
     
     if "data" in env_vars:
         env_data = env_vars["data"]
@@ -526,24 +573,46 @@ async def diagnose_tunnel_issues(app_uuid: str) -> Dict:
 
 # Main entry point with HTTP transport
 if __name__ == "__main__":
-    import sys
-    
-    auth_status = "Enabled" if MCP_AUTH_TOKEN else "DISABLED"
+    # Build ASGI wrapper with health, auth, and CORS
+    async def health(_request: Request):
+        return PlainTextResponse("ok", status_code=200)
+
+    class BearerAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            # Allow health/ready without auth
+            if request.method == "GET" and request.url.path in ("/health", "/ready"):
+                return await call_next(request)
+            auth = request.headers.get("authorization", "")
+            if not (auth.startswith("Bearer ") and auth.split(" ", 1)[1] == MCP_AUTH_TOKEN):
+                return Response("Unauthorized", status_code=401)
+            return await call_next(request)
+
+    mcp_asgi = getattr(app, "asgi", None) or getattr(app, "asgi_app", None) or getattr(app, "_app", None)
+    if mcp_asgi is None:
+        raise RuntimeError("FastMCP ASGI app not found; please update FastMCP to 2.x")
+
+    http_app = Starlette(routes=[
+        Route("/health", health, methods=["GET"]),
+        Route("/ready", health, methods=["GET"]),
+        Mount("/", app=mcp_asgi),
+    ])
+
+    http_app.add_middleware(BearerAuthMiddleware)
+    http_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if ALLOWED_ORIGINS == ["*"] else ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     print("=" * 60)
     print("Coolify MCP Server - REMOTE MODE")
     print("=" * 60)
     print(f"Host: {MCP_HOST}")
     print(f"Port: {MCP_PORT}")
-    print(f"Auth: {auth_status}")
+    print("Auth: Enabled")
     print(f"Local: http://localhost:{MCP_PORT}")
     print("=" * 60)
-    
-    # Run with SSE (Server-Sent Events) transport for remote access
-    # FastMCP supports: stdio, sse, or custom transports
-    import asyncio
-    
-    # Use the new FastMCP 2.x method
-    asyncio.run(app.run_http_async(
-        host=MCP_HOST,
-        port=MCP_PORT
-    ))
+
+    uvicorn.run(http_app, host=MCP_HOST, port=MCP_PORT)
