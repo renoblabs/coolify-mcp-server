@@ -30,4 +30,5 @@ if __name__ == "__main__":
     print(f"Local: http://localhost:{server.MCP_PORT}")
     print("=" * 60)
 
-    asyncio.run(server.app.run_sse_async(host=server.MCP_HOST, port=server.MCP_PORT))
+    # Use FastMCP 2.x method
+    asyncio.run(server.app.run_http_async(host=server.MCP_HOST, port=server.MCP_PORT))

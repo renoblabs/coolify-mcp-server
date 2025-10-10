@@ -96,7 +96,11 @@ async def get_server_info() -> Dict:
 @app.tool()
 async def list_applications() -> Dict:
     """List all applications in Coolify"""
-    return await make_coolify_request("GET", "/applications")
+    result = await make_coolify_request("GET", "/applications")
+    # Ensure result is always a dict for FastMCP 2.x compatibility
+    if isinstance(result, list):
+        return {"applications": result, "count": len(result)}
+    return result
 
 @app.tool()
 async def get_application_details(app_uuid: str) -> Dict:
@@ -181,7 +185,11 @@ async def list_servers() -> Dict:
     Returns information about all deployment destinations including
     local server, remote servers, and their capabilities.
     """
-    return await make_coolify_request("GET", "/servers")
+    result = await make_coolify_request("GET", "/servers")
+    # Ensure result is always a dict for FastMCP 2.x compatibility
+    if isinstance(result, list):
+        return {"servers": result, "count": len(result)}
+    return result
 
 @app.tool()
 async def get_server_details(server_uuid: str) -> Dict:
@@ -534,7 +542,8 @@ if __name__ == "__main__":
     # FastMCP supports: stdio, sse, or custom transports
     import asyncio
     
-    asyncio.run(app.run_sse_async(
+    # Use the new FastMCP 2.x method
+    asyncio.run(app.run_http_async(
         host=MCP_HOST,
         port=MCP_PORT
     ))
