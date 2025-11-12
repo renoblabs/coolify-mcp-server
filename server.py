@@ -587,32 +587,14 @@ if __name__ == "__main__":
                 return Response("Unauthorized", status_code=401)
             return await call_next(request)
 
-    mcp_asgi = getattr(app, "asgi", None) or getattr(app, "asgi_app", None) or getattr(app, "_app", None)
-    if mcp_asgi is None:
-        raise RuntimeError("FastMCP ASGI app not found; please update FastMCP to 2.x")
-
-    http_app = Starlette(routes=[
-        Route("/health", health, methods=["GET"]),
-        Route("/ready", health, methods=["GET"]),
-        Mount("/", app=mcp_asgi),
-    ])
-
-    http_app.add_middleware(BearerAuthMiddleware)
-    http_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"] if ALLOWED_ORIGINS == ["*"] else ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     print("=" * 60)
     print("Coolify MCP Server - REMOTE MODE")
     print("=" * 60)
     print(f"Host: {MCP_HOST}")
     print(f"Port: {MCP_PORT}")
-    print("Auth: Enabled")
+    print(f"Auth: {'Enabled' if MCP_AUTH_TOKEN else 'Disabled'}")
     print(f"Local: http://localhost:{MCP_PORT}")
     print("=" * 60)
 
-    uvicorn.run(http_app, host=MCP_HOST, port=MCP_PORT)
+    # Use FastMCP's stdio transport (standard MCP protocol)
+    app.run(transport="stdio")
