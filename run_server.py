@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Wrapper to run server.py with proper encoding on Windows
-This explicitly starts the FastMCP SSE server instead of relying on
-server.py's __main__ guard (which doesn't run when imported).
+Windows-optimized wrapper to run server.py
+Forces UTF-8 encoding and runs the server directly.
 """
 import sys
 import os
-import asyncio
+import subprocess
 
 # Force UTF-8 encoding on Windows
 if sys.platform == "win32":
@@ -15,20 +14,26 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
     # Set console to UTF-8
     os.system('chcp 65001 > nul')
+    print("✓ Windows UTF-8 encoding configured")
 
-# Import server module and start the SSE transport directly
-import server
-
+# Run server.py with all command line arguments
 if __name__ == "__main__":
-    auth_status = "Enabled" if server.MCP_AUTH_TOKEN else "DISABLED"
-    print("=" * 60)
-    print("Coolify MCP Server - REMOTE MODE (run_server.py)")
-    print("=" * 60)
-    print(f"Host: {server.MCP_HOST}")
-    print(f"Port: {server.MCP_PORT}")
-    print(f"Auth: {auth_status}")
-    print(f"Local: http://localhost:{server.MCP_PORT}")
-    print("=" * 60)
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    server_path = os.path.join(script_dir, "server.py")
 
-    # Use FastMCP 2.x method
-    asyncio.run(server.app.run_http_async(host=server.MCP_HOST, port=server.MCP_PORT))
+    # Pass through all command line arguments
+    args = [sys.executable, server_path] + sys.argv[1:]
+
+    print(f"Starting: {' '.join(args)}")
+    print("")
+
+    # Run server.py directly
+    try:
+        subprocess.run(args, check=True)
+    except KeyboardInterrupt:
+        print("\nShutdown requested")
+        sys.exit(0)
+    except subprocess.CalledProcessError as e:
+        print(f"Server exited with error code: {e.returncode}")
+        sys.exit(e.returncode)

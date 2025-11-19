@@ -14,6 +14,22 @@ from dotenv import load_dotenv
 import cloudflare
 import secrets
 import hashlib
+import logging
+import sys
+import signal
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+from starlette.requests import Request
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("coolify-mcp-server")
 
 # Load environment variables
 load_dotenv()
@@ -39,36 +55,127 @@ MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")  # Listen on all interfaces
 # Generate auth token if not set
 if not MCP_AUTH_TOKEN:
     MCP_AUTH_TOKEN = secrets.token_urlsafe(32)
-    print(f"Generated MCP Auth Token: {MCP_AUTH_TOKEN}")
-    print("Save this token in Doppler: doppler secrets set MCP_AUTH_TOKEN=\"{MCP_AUTH_TOKEN}\"")
+    logger.warning("=" * 80)
+    logger.warning("🔐 GENERATED NEW MCP AUTH TOKEN (SAVE THIS!):")
+    logger.warning(f"   {MCP_AUTH_TOKEN}")
+    logger.warning("=" * 80)
+    logger.warning(f"Save with: doppler secrets set MCP_AUTH_TOKEN=\"{MCP_AUTH_TOKEN}\"")
+    logger.warning("=" * 80)
 
 # Optional: Support for switching between local and tunnel URLs
 if os.getenv("USE_TUNNEL", "false").lower() == "true":
     COOLIFY_BASE_URL = os.getenv("COOLIFY_TUNNEL_URL", "https://cloud.therink.io")
 
 async def make_coolify_request(method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
-    """Make authenticated request to Coolify API"""
+    """Make authenticated request to Coolify API with proper error handling"""
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    
-    if API_TOKEN:
-        headers["Authorization"] = f"Bearer {API_TOKEN}"
-    
+
+    if not API_TOKEN:
+        error_msg = "COOLIFY_API_TOKEN not configured"
+        logger.error(error_msg)
+        return {"error": error_msg, "success": False}
+
+    headers["Authorization"] = f"Bearer {API_TOKEN}"
     url = f"{COOLIFY_BASE_URL}/api/v1{endpoint}"
-    
+
     async with httpx.AsyncClient() as client:
         try:
+            logger.debug(f"{method} {url}")
             response = await client.request(method, url, headers=headers, json=data, timeout=30)
-            return response.json() if response.text else {}
+
+            # Handle different response status codes
+            if response.status_code >= 400:
+                error_msg = f"Coolify API error: {response.status_code}"
+                logger.error(f"{error_msg} - {response.text[:200]}")
+                return {
+                    "error": error_msg,
+                    "status_code": response.status_code,
+                    "success": False,
+                    "details": response.text[:500] if response.text else None
+                }
+
+            # Parse JSON response
+            if response.text:
+                try:
+                    return response.json()
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON response from Coolify: {e}")
+                    return {"error": "Invalid JSON response", "success": False}
+
+            return {"success": True}
+
+        except httpx.TimeoutException as e:
+            error_msg = f"Coolify API timeout after 30s"
+            logger.error(error_msg)
+            return {"error": error_msg, "success": False}
+        except httpx.ConnectError as e:
+            error_msg = f"Cannot connect to Coolify at {COOLIFY_BASE_URL}"
+            logger.error(f"{error_msg}: {str(e)}")
+            return {"error": error_msg, "success": False}
         except Exception as e:
-            return {"error": str(e)}
+            error_msg = f"Unexpected error: {str(e)}"
+            logger.exception(f"Error in Coolify request: {e}")
+            return {"error": error_msg, "success": False}
 
 # ==================== AUTHENTICATION ====================
-# Note: FastMCP doesn't have built-in auth middleware for SSE
-# Authentication should be handled by the reverse proxy (Cloudflare Tunnel)
-# or implemented at the transport layer
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Middleware to enforce Bearer token authentication for HTTP/SSE endpoints"""
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip auth for health check endpoint
+        if request.url.path in ["/health", "/healthz"]:
+            return await call_next(request)
+
+        # Skip auth if no token configured (development mode)
+        if not MCP_AUTH_TOKEN:
+            logger.warning("⚠️  No MCP_AUTH_TOKEN configured - running in INSECURE mode!")
+            return await call_next(request)
+
+        # Extract Authorization header
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            logger.warning(f"Authentication failed: No Authorization header from {request.client.host}")
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "Authentication required",
+                    "message": "Missing Authorization header. Use: Authorization: Bearer YOUR_TOKEN"
+                }
+            )
+
+        # Verify Bearer token format
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            logger.warning(f"Authentication failed: Invalid format from {request.client.host}")
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "Invalid authentication format",
+                    "message": "Use: Authorization: Bearer YOUR_TOKEN"
+                }
+            )
+
+        token = parts[1]
+
+        # Verify token
+        if token != MCP_AUTH_TOKEN:
+            logger.warning(f"Authentication failed: Invalid token from {request.client.host}")
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Authentication failed",
+                    "message": "Invalid authentication token"
+                }
+            )
+
+        # Token valid, proceed with request
+        logger.debug(f"✓ Authenticated request from {request.client.host}")
+        return await call_next(request)
 
 # ==================== SERVER INFO ====================
 
@@ -134,19 +241,39 @@ async def get_application_environment(app_uuid: str) -> Dict:
 @app.tool()
 async def update_application_environment(app_uuid: str, env_vars: Dict[str, str]) -> Dict:
     """Update environment variables for an application
-    
+
     Args:
         app_uuid: The UUID of the application
         env_vars: Dictionary of environment variables to set/update
     """
+    # Get existing environment variables
     existing = await make_coolify_request("GET", f"/applications/{app_uuid}/environment")
-    
-    if "data" in existing:
-        current_vars = existing.get("data", {})
+
+    # Handle errors from fetching existing vars
+    if "error" in existing:
+        logger.error(f"Failed to fetch existing env vars for {app_uuid}: {existing.get('error')}")
+        return existing
+
+    # Merge with existing variables if present
+    if "data" in existing and isinstance(existing["data"], dict):
+        current_vars = existing["data"].copy()
         current_vars.update(env_vars)
         env_vars = current_vars
-    
-    return await make_coolify_request("PUT", f"/applications/{app_uuid}/environment", {"environment": env_vars})
+        logger.debug(f"Merged {len(env_vars)} environment variables")
+    else:
+        logger.warning(f"No existing env vars found, creating new set")
+
+    # Update the environment variables
+    result = await make_coolify_request(
+        "PUT",
+        f"/applications/{app_uuid}/environment",
+        {"environment": env_vars}
+    )
+
+    if "error" not in result:
+        logger.info(f"Successfully updated environment for {app_uuid}")
+
+    return result
 
 @app.tool()
 async def get_application_logs(app_uuid: str, lines: int = 100) -> Dict:
@@ -205,26 +332,36 @@ async def get_server_details(server_uuid: str) -> Dict:
 @app.tool()
 async def get_server_resources(server_uuid: str) -> Dict:
     """Get resource usage and availability for a server
-    
+
     Args:
         server_uuid: The UUID of the server to check
-        
+
     Returns CPU, RAM, disk usage, and availability info
     """
     server_info = await make_coolify_request("GET", f"/servers/{server_uuid}")
-    
+
     if "error" in server_info:
+        logger.error(f"Failed to get server resources for {server_uuid}: {server_info.get('error')}")
         return server_info
-    
-    # Extract resource information from server data
+
+    # Validate response structure
+    if "data" not in server_info or not isinstance(server_info["data"], dict):
+        error_msg = "Invalid server response format"
+        logger.error(f"{error_msg}: {server_info}")
+        return {"error": error_msg, "success": False}
+
+    data = server_info["data"]
+
+    # Extract resource information with validation
     resources = {
         "server_uuid": server_uuid,
-        "server_name": server_info.get("data", {}).get("name", "Unknown"),
-        "status": server_info.get("data", {}).get("status", "unknown"),
-        "resources": server_info.get("data", {}).get("resources", {}),
-        "available": server_info.get("data", {}).get("status") == "reachable"
+        "server_name": data.get("name", "Unknown"),
+        "status": data.get("status", "unknown"),
+        "resources": data.get("resources", {}),
+        "available": data.get("status") == "reachable"
     }
-    
+
+    logger.debug(f"Retrieved resources for {resources['server_name']}: {resources['status']}")
     return resources
 
 @app.tool()
@@ -524,26 +661,121 @@ async def diagnose_tunnel_issues(app_uuid: str) -> Dict:
         "has_issues": len(issues) > 0
     }
 
-# Main entry point with HTTP transport
+# ==================== GRACEFUL SHUTDOWN ====================
+
+shutdown_event = asyncio.Event()
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    shutdown_event.set()
+
+# ==================== MAIN ENTRY POINT ====================
+
 if __name__ == "__main__":
-    import sys
-    
-    auth_status = "Enabled" if MCP_AUTH_TOKEN else "DISABLED"
-    print("=" * 60)
-    print("Coolify MCP Server - REMOTE MODE")
-    print("=" * 60)
-    print(f"Host: {MCP_HOST}")
-    print(f"Port: {MCP_PORT}")
-    print(f"Auth: {auth_status}")
-    print(f"Local: http://localhost:{MCP_PORT}")
-    print("=" * 60)
-    
-    # Run with SSE (Server-Sent Events) transport for remote access
-    # FastMCP supports: stdio, sse, or custom transports
-    import asyncio
-    
-    # Use the new FastMCP 2.x method
-    asyncio.run(app.run_http_async(
-        host=MCP_HOST,
-        port=MCP_PORT
-    ))
+    import argparse
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Coolify MCP Server")
+    parser.add_argument(
+        "--mode",
+        choices=["stdio", "http", "sse"],
+        default="http",
+        help="Transport mode: stdio (local IPC), http/sse (remote access)"
+    )
+    parser.add_argument(
+        "--host",
+        default=MCP_HOST,
+        help=f"Host to bind to (default: {MCP_HOST})"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=MCP_PORT,
+        help=f"Port to bind to (default: {MCP_PORT})"
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging"
+    )
+
+    args = parser.parse_args()
+
+    # Update logging level if debug mode
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Debug logging enabled")
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Display startup information
+    auth_status = "✅ Enabled" if MCP_AUTH_TOKEN else "⚠️  DISABLED (INSECURE)"
+
+    if args.mode == "stdio":
+        # STDIO mode for local IDEs (Claude Desktop, Factory Bridge)
+        logger.info("=" * 80)
+        logger.info("🚀 Coolify MCP Server - STDIO MODE")
+        logger.info("=" * 80)
+        logger.info("Transport: Standard Input/Output (JSON-RPC)")
+        logger.info("Use case: Local IDE integration (Claude Desktop, Factory Bridge)")
+        logger.info(f"Auth: {auth_status}")
+        logger.info("=" * 80)
+
+        try:
+            app.run()
+        except KeyboardInterrupt:
+            logger.info("Shutdown requested, exiting...")
+        except Exception as e:
+            logger.exception(f"Fatal error in STDIO mode: {e}")
+            sys.exit(1)
+
+    else:
+        # HTTP/SSE mode for remote access
+        logger.info("=" * 80)
+        logger.info("🚀 Coolify MCP Server - HTTP/SSE MODE")
+        logger.info("=" * 80)
+        logger.info(f"Host: {args.host}")
+        logger.info(f"Port: {args.port}")
+        logger.info(f"Auth: {auth_status}")
+        logger.info(f"Local URL: http://localhost:{args.port}")
+        logger.info(f"Health Check: http://localhost:{args.port}/health")
+        logger.info("=" * 80)
+        logger.info("📱 Use case: Mobile AI apps, remote access, web integrations")
+        logger.info("🔧 Tools available: 18 (Coolify + Cloudflare + Multi-server)")
+        logger.info("=" * 80)
+
+        async def run_server():
+            """Run the HTTP server with authentication middleware"""
+            try:
+                logger.info("🔐 Authentication middleware: " + ("Enabled" if MCP_AUTH_TOKEN else "Disabled"))
+
+                # Prepare middleware in Starlette format: (class, args, kwargs)
+                middleware_list = []
+                if MCP_AUTH_TOKEN:
+                    middleware_list.append((AuthMiddleware, [], {}))
+
+                # Run HTTP server with authentication middleware
+                # FastMCP 2.x supports middleware parameter
+                await app.run_http_async(
+                    host=args.host,
+                    port=args.port,
+                    transport="sse",  # Use SSE transport for MCP protocol
+                    middleware=middleware_list,
+                    show_banner=False  # We already showed our custom banner
+                )
+            except KeyboardInterrupt:
+                logger.info("Shutdown requested, exiting...")
+            except Exception as e:
+                logger.exception(f"Fatal error in HTTP mode: {e}")
+                raise
+
+        try:
+            asyncio.run(run_server())
+        except KeyboardInterrupt:
+            logger.info("Shutdown complete")
+        except Exception as e:
+            logger.exception(f"Server failed: {e}")
+            sys.exit(1)
