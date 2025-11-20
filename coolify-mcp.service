@@ -1,0 +1,20 @@
+[Unit]
+Description=Coolify MCP Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jason
+Group=jason
+WorkingDirectory=/home/jason/coolify-mcp-server
+Environment="PATH=/home/jason/coolify-mcp-server/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/jason/coolify-mcp-server/venv/bin/python /home/jason/coolify-mcp-server/server.py --mode http --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=coolify-mcp
+
+[Install]
+WantedBy=multi-user.target
