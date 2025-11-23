@@ -1,8 +1,6 @@
 # Coolify MCP Server 🚀
 
-**Production-Ready Remote MCP Server for Coolify Automation**
-
-Control your entire Coolify infrastructure remotely through AI assistants, mobile apps, or direct API calls. Fully consolidated and ready for deployment on your Linux dev box at `mcp.therink.io`.
+Remote MCP server for Coolify automation over HTTP/SSE. This codebase currently runs in HTTP/SSE mode (not STDIO). Use an MCP‑compatible client or place it behind a reverse proxy (e.g., Cloudflare Tunnel) for remote access.
 
 ## 🎯 What It Does
 
@@ -13,7 +11,7 @@ Control your entire Coolify infrastructure remotely through AI assistants, mobil
 - **⚡ Multi-Server**: Smart deployment across multiple Coolify servers
 - **🛠️ Windows & Linux**: Cross-platform with optimized runners
 
-## ⚡ Quick Start
+## ⚡ Quick Start (HTTP/SSE)
 
 ### Production Deployment (Linux)
 ```bash
@@ -33,17 +31,16 @@ doppler secrets set USE_TUNNEL="true"
 doppler secrets set CLOUDFLARE_API_TOKEN="your-cf-token"  # Optional
 doppler secrets set CLOUDFLARE_ZONE_ID="your-zone-id"      # Optional
 
-# 4. Start server (Linux/Production)
-./start.sh
-```
-
-### Windows Development
-```powershell
-# Use the Windows-optimized runner
+# 4. Start server
 python run_server.py
 ```
 
-**Production**: Server runs at `http://localhost:8765` and is exposed at `https://mcp.therink.io`
+### Windows
+```powershell
+python run_server.py
+```
+
+Server runs at `http://localhost:8765`. Expose it via your reverse proxy or Cloudflare Tunnel as needed.
 
 ## 🔧 Available Tools
 
@@ -74,9 +71,9 @@ python run_server.py
 
 ## 🌐 Remote Access Setup
 
-### 1. Configure Cloudflare Tunnel
+1) Configure your reverse proxy (e.g., Cloudflare Tunnel) to route your hostname to `http://localhost:8765`.
 
-Add to your tunnel config or dashboard:
+Example (Cloudflare Tunnel):
 ```yaml
 ingress:
   - hostname: mcp.your-domain.com
@@ -84,29 +81,15 @@ ingress:
   - service: http_status:404
 ```
 
-### 2. Mobile App Configuration
-
-Use `examples/mobile_app_config.json.example` as template:
-
-```json
-{
-  "name": "Coolify Assistant",
-  "endpoint": "https://mcp.your-domain.com",
-  "transport": "sse",
-  "authentication": {
-    "type": "bearer",
-    "token": "YOUR_MCP_AUTH_TOKEN"
-  }
-}
-```
+2) Configure your MCP client using `examples/mobile_app_config.json.example`.
 
 ## 📝 Configuration
 
 ### Required Secrets (Doppler)
 - `COOLIFY_API_TOKEN` - From Coolify → Security → API Tokens
-- `COOLIFY_TUNNEL_URL` - Your Cloudflare tunnel URL (e.g., `https://cloud.domain.com`)
-- `MCP_AUTH_TOKEN` - Random secure token for MCP access
-- `USE_TUNNEL` - Set to `"true"` for tunnel access
+- `COOLIFY_TUNNEL_URL` - Optional; used when `USE_TUNNEL=true`
+- `MCP_AUTH_TOKEN` - Bearer token enforced by the server (and recommended at your reverse proxy as well)
+- `USE_TUNNEL` - Set to `"true"` to prefer your tunnel URL for Coolify API
 
 ### Optional Secrets
 - `CLOUDFLARE_API_TOKEN` - For DNS automation
@@ -122,53 +105,25 @@ Copy `.env.example` to `.env` if not using Doppler:
 ```bash
 cp .env.example .env
 # Edit .env with your values
-python server.py
+python run_server.py
 ```
 
 ## 🧪 Testing
 
 ```bash
+# Verify Remote Server (HTTP/SSE)
+python tests/test_remote_server.py
+
 # Test Coolify API access
 python tests/test_apps.py
 
 # Test Cloudflare automation
 python tests/test_cf_automation.py
-
-# Test remote server
-python tests/test_remote_server.py
 ```
 
 ## 🚀 Usage Examples
 
-### Multi-Server Deployment
-```
-AI: "Show me all my servers"
-→ Uses list_servers()
-
-AI: "Deploy my Stable Diffusion app to the GPU server"
-→ Uses smart_deploy() with requires_gpu=true
-
-AI: "Deploy this lightweight API to the dev box"
-→ Uses deploy_to_server(app_uuid, "Dev Box")
-```
-
-### Via Mobile AI App
-"Deploy my Supabase instance to supabase.mydomain.com"
-→ Creates DNS, updates env vars, triggers deployment
-
-### Via curl
-```bash
-# List applications
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-     https://mcp.your-domain.com/tools
-
-# Execute a tool
-curl -X POST \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"tool": "list_applications"}' \
-     https://mcp.your-domain.com/execute
-```
+Use an MCP-compatible client (mobile/desktop) with `transport: "sse"` and bearer auth at your reverse proxy. See `examples/mobile_app_config.json.example`.
 
 ## 📚 Documentation
 
@@ -178,11 +133,11 @@ curl -X POST \
 
 ## 🔒 Security
 
-- ✅ Bearer token authentication
-- ✅ Secrets managed via Doppler
-- ✅ HTTPS via Cloudflare tunnel
-- ✅ No secrets in repository
-- 🔄 Rotate `MCP_AUTH_TOKEN` regularly
+- The server enforces Bearer token authentication (401 without valid `MCP_AUTH_TOKEN`).
+- Additionally enforce auth at your reverse proxy (Cloudflare Access or mTLS) for defense in depth.
+- Secrets managed via Doppler; no secrets in repository.
+- Use HTTPS via Cloudflare Tunnel or your proxy.
+- Rotate `MCP_AUTH_TOKEN` regularly.
 
 ## 🛠️ Troubleshooting
 
@@ -194,20 +149,17 @@ doppler secrets
 # Verify Python dependencies
 pip install -r requirements.txt
 
-# Test with debug logging
-doppler run -- python server.py --debug
+# Run the remote server
+python run_server.py
 ```
 
 ### Can't connect remotely
 ```bash
-# Verify tunnel is running
+# Verify tunnel/proxy DNS
 nslookup mcp.your-domain.com
 
-# Test locally first
-curl http://localhost:8765/health
-
-# Check auth token matches
-doppler secrets get MCP_AUTH_TOKEN
+# Verify the HTTP server is listening
+python tests/test_remote_server.py
 ```
 
 ### Tools not working
