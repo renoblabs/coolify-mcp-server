@@ -29,5 +29,7 @@ if __name__ == "__main__":
     print(f"Local: http://localhost:{server.MCP_PORT}")
     print("=" * 60)
 
-    # Start ASGI app
-    uvicorn.run(server=http_app if (http_app := getattr(server, 'http_app', None)) else server.app, host=server.MCP_HOST, port=server.MCP_PORT)
+    # Start ASGI app - run the server.py main block to create http_app
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "server.py"], cwd=".")
