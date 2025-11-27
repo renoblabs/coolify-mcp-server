@@ -7,7 +7,7 @@
       "transport": "sse",
       "authentication": {
         "type": "bearer",
-        "token": "YOUR_MCP_AUTH_TOKEN_FROM_DOPPLER"
+      "token": "YOUR_MCP_AUTH_TOKEN_FROM_DOPPLER"
       },
       "capabilities": [
         "list_applications",
@@ -34,8 +34,8 @@
   "instructions": {
     "setup": [
       "1. Set MCP_AUTH_TOKEN in Doppler secrets",
-      "2. Configure Cloudflare tunnel to route mcp.your-domain.com to localhost:8765",
-      "3. Start server: ./start.sh",
+      "2. Configure Cloudflare Tunnel or reverse proxy to route mcp.your-domain.com to http://localhost:8765",
+      "3. Start server: python run_server.py",
       "4. Use the endpoint and token in your mobile AI app"
     ]
   }

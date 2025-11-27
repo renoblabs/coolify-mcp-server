@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "coolify": {
+      "url": "http://localhost:8765/sse",
+      "headers": {
+        "Authorization": "Bearer DRMRzN0/N8hvgJYhSTKeVET/XFQidMrKj3oJaCewoEc="
+      }
+    }
+  }
+}
