@@ -16,6 +16,7 @@ import secrets
 import hashlib
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse, Response
+from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -588,13 +589,20 @@ if __name__ == "__main__":
             return await call_next(request)
 
     print("=" * 60)
-    print("Coolify MCP Server - REMOTE MODE")
+    print("Coolify MCP Server - REMOTE MODE (SSE)")
     print("=" * 60)
     print(f"Host: {MCP_HOST}")
     print(f"Port: {MCP_PORT}")
     print(f"Auth: {'Enabled' if MCP_AUTH_TOKEN else 'Disabled'}")
     print(f"Local: http://localhost:{MCP_PORT}")
+    print(f"SSE Endpoint: http://localhost:{MCP_PORT}/sse")
+    print(f"Auth Token: {MCP_AUTH_TOKEN[:20]}..." if MCP_AUTH_TOKEN else "Auth Token: NOT SET")
     print("=" * 60)
 
-    # Use FastMCP's stdio transport (standard MCP protocol)
-    app.run(transport="stdio")
+    # Use FastMCP's built-in run method which handles routing
+    # FastMCP will create the SSE and HTTP endpoints automatically
+    app.run(
+        transport="sse",
+        host=MCP_HOST,
+        port=MCP_PORT,
+    )

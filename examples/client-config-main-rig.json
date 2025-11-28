@@ -1,0 +1,16 @@
+{
+  "comment": "Claude Code MCP Configuration for Main Rig",
+  "comment2": "Save this to ~/.config/claude/mcp.json or your project's .mcp.json",
+  "comment3": "Replace 192.168.2.30 with your dev box IP",
+  "comment4": "The auth token must match MCP_AUTH_TOKEN in your dev box .env file",
+
+  "mcpServers": {
+    "coolify-server": {
+      "type": "sse",
+      "url": "http://192.168.2.30:8765/sse",
+      "headers": {
+        "Authorization": "Bearer E2L98+RsBfM7vSBNoDvPmdA4iYj1C0FrBqsd14LEQXo="
+      }
+    }
+  }
+}
