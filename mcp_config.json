@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "coolify": {
+            "command": "python",
+            "args": [
+                "c:\\Users\\19057\\CoolifyMCP\\coolify-mcp-server\\server_stdio.py"
+            ],
+            "env": {
+                "COOLIFY_BASE_URL": "https://cloud.therink.io",
+                "COOLIFY_API_TOKEN": "3|3e7fzF0d5C1WT5s0aRa6ini5eLoAodvuwqxzkq1l14ec4cb8"
+            }
+        }
+    }
+}
