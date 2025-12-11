@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "coolify": {
+            "command": "python3",
+            "args": [
+                "/home/username/coolify-mcp-server/server_stdio.py"
+            ],
+            "env": {
+                "COOLIFY_BASE_URL": "https://your-coolify-url.com",
+                "COOLIFY_API_TOKEN": "your-api-token-here"
+            }
+        }
+    }
+}

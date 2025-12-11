@@ -14,6 +14,7 @@ The server will:
 - Load credentials from .env file or environment variables
 - Connect to your Coolify instance remotely
 - Provide all Coolify automation tools to your IDE
+This version runs in STDIO mode for Cursor, Claude Desktop, etc.
 """
 import sys
 import os
@@ -31,3 +32,15 @@ if __name__ == "__main__":
 
     # Run in STDIO mode
     app.run(transport="stdio")
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import the main server
+from server import app
+
+if __name__ == "__main__":
+    # Override transport to STDIO
+    print("Starting Coolify MCP Server in STDIO mode...", file=sys.stderr)
+    app.run(transport="stdio")
+
+
