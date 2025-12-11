@@ -1,10 +1,11 @@
 {
     "mcpServers": {
         "coolify": {
-            "command": "python",
+            "command": "C:\\Users\\19057\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
             "args": [
-                "c:\\Users\\19057\\CoolifyMCP\\coolify-mcp-server\\server_stdio.py"
+                "c:\\Users\\19057\\coolify-mcp-server\\server_stdio.py"
             ],
+            "cwd": "c:\\Users\\19057\\coolify-mcp-server",
             "env": {
                 "COOLIFY_BASE_URL": "https://cloud.therink.io",
                 "COOLIFY_API_TOKEN": "3|3e7fzF0d5C1WT5s0aRa6ini5eLoAodvuwqxzkq1l14ec4cb8"

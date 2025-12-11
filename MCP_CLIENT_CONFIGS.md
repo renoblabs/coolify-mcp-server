@@ -2,6 +2,28 @@
 
 This MCP server works with multiple clients. Here are the configurations:
 
+## Google Antigravity (Deepmind)
+
+**Detailed Guide:** [docs/ANTIGRAVITY_SETUP.md](docs/ANTIGRAVITY_SETUP.md)
+
+**Configuration:**
+Antigravity requires absolute paths and the `stdio` transport on Windows.
+```json
+{
+  "mcpServers": {
+    "coolify": {
+      "command": "C:\\Path\\To\\Python\\python.exe",
+      "args": ["C:\\Users\\...\\coolify-mcp-server\\server_stdio.py"],
+      "cwd": "C:\\Users\\...\\coolify-mcp-server",
+      "env": {
+        "COOLIFY_API_TOKEN": "your-token",
+        "COOLIFY_BASE_URL": "https://cloud.therink.io"
+      }
+    }
+  }
+}
+```
+
 ## Claude Desktop (Anthropic)
 
 **Config Location:**

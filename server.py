@@ -93,19 +93,16 @@ async def _get_application_details_impl(app_uuid: str) -> Dict:
     return await make_coolify_request("GET", f"/applications/{app_uuid}")
 
 async def _deploy_application_impl(app_uuid: str, force_rebuild: bool = False) -> Dict:
-    data = {"force_rebuild": force_rebuild}
-    return await make_coolify_request("POST", f"/applications/{app_uuid}/deploy", data)
+    endpoint = f"/deploy?uuid={app_uuid}"
+    if force_rebuild:
+        endpoint += "&force=true"
+    return await make_coolify_request("GET", endpoint)
 
 async def _get_application_environment_impl(app_uuid: str) -> Dict:
-    return await make_coolify_request("GET", f"/applications/{app_uuid}/environment")
+    return await make_coolify_request("GET", f"/applications/{app_uuid}/envs")
 
 async def _update_application_environment_impl(app_uuid: str, env_vars: Dict[str, str]) -> Dict:
-    existing = await _get_application_environment_impl(app_uuid)
-    if "data" in existing:
-        current_vars = existing.get("data", {})
-        current_vars.update(env_vars)
-        env_vars = current_vars
-    return await make_coolify_request("PUT", f"/applications/{app_uuid}/environment", {"environment": env_vars})
+    return await make_coolify_request("PATCH", f"/applications/{app_uuid}/envs", {"data": env_vars})
 
 async def _get_application_logs_impl(app_uuid: str, lines: int = 100) -> Dict:
     return await make_coolify_request("GET", f"/applications/{app_uuid}/logs?lines={lines}")
